@@ -26,6 +26,9 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const token = localStorage.getItem('token');
             
+            // Mostrar mensaje de carga
+            showAlert('Cargando información del curso...', 'info');
+            
             // Cargar curso
             const course = await api.getCourseDetail(id, token);
             
@@ -40,6 +43,9 @@ document.addEventListener('DOMContentLoaded', function() {
             // Cargar calificaciones del usuario
             const grades = await api.getGrades(token);
             
+            // Quitar alerta de carga
+            document.getElementById('alert-container').innerHTML = '';
+            
             // Mostrar actividades y calificaciones
             displayActivities(activities, grades);
             
@@ -48,7 +54,14 @@ document.addEventListener('DOMContentLoaded', function() {
             
         } catch (error) {
             console.error('Error cargando detalles del curso:', error);
-            showAlert('Error al cargar los detalles del curso. Por favor, intente nuevamente más tarde.');
+            if (error.status === 401) {
+                // Token expirado
+                localStorage.removeItem('token');
+                localStorage.removeItem('refreshToken');
+                window.location.href = 'index.html';
+            } else {
+                showAlert('Error al cargar los detalles del curso. Por favor, intente nuevamente más tarde.');
+            }
         }
     }
     
@@ -137,7 +150,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Función para mostrar resumen
+    // Función para mostrar resumen (CORREGIDA)
     function displaySummary(activities, grades) {
         const container = document.getElementById('summary-container');
         
@@ -160,25 +173,20 @@ document.addEventListener('DOMContentLoaded', function() {
         // Puntos mínimos para aprobar (61%)
         const minPointsToPass = (totalWeight * 61) / 100;
         
-        // Puntos faltantes - solo si hay puntos obtenidos, sino mostrar el total mínimo
-        const missingPoints = earnedPoints > 0 ? 
-            Math.max(0, minPointsToPass - earnedPoints) : 
-            minPointsToPass;
+        // Puntos faltantes (CORREGIDO)
+        const missingPoints = Math.max(0, minPointsToPass - earnedPoints);
         
         // Determinar si es posible aprobar
         const remainingPoints = totalWeight - evaluatedWeight;
         const canStillPass = missingPoints <= remainingPoints;
         
-        // Estado del curso
+        // Estado del curso (MEJORADO)
         let courseStatus = '';
         let statusClass = '';
         
         if (earnedPoints >= minPointsToPass) {
             courseStatus = "Ya tienes los puntos para aprobar";
             statusClass = "success";
-        } else if (evaluatedWeight >= totalWeight) {
-            courseStatus = "No alcanzaste los puntos para aprobar";
-            statusClass = "danger";
         } else if (canStillPass) {
             courseStatus = `Necesitas ${missingPoints.toFixed(2)} pts más`;
             statusClass = "warning";
@@ -249,7 +257,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const token = localStorage.getItem('token');
         
         try {
+            showAlert('Guardando calificaciones...', 'info');
+            
             let savedAnyGrade = false;
+            let errors = [];
             
             // Procesar datos del formulario
             for (const [key, value] of formData.entries()) {
@@ -257,6 +268,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Extraer ID de actividad
                     const activityId = parseInt(key.match(/\[(\d+)\]/)[1]);
                     const grade = parseFloat(value);
+                    
+                    // Validar rango de calificación
+                    if (grade < 0 || grade > 100) {
+                        errors.push(`La calificación para la actividad ID ${activityId} debe estar entre 0 y 100`);
+                        continue;
+                    }
                     
                     console.log('Enviando calificación:', {
                         actividad: activityId,
@@ -284,11 +301,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         savedAnyGrade = true;
                     } catch (innerError) {
                         console.error(`Error guardando calificación para actividad ${activityId}:`, innerError);
+                        errors.push(`Error al guardar la calificación para la actividad #${activityId}`);
                     }
                 }
             }
             
-            if (savedAnyGrade) {
+            if (errors.length > 0) {
+                showAlert(`Se encontraron errores: ${errors.join(', ')}`, 'warning');
+            } else if (savedAnyGrade) {
                 showAlert('Calificaciones guardadas correctamente.', 'success');
                 
                 // Recargar página para mostrar cambios
@@ -301,7 +321,17 @@ document.addEventListener('DOMContentLoaded', function() {
             
         } catch (error) {
             console.error('Error general guardando calificaciones:', error);
-            showAlert('Error al guardar las calificaciones. Por favor, intente nuevamente más tarde.');
+            if (error.status === 401) {
+                // Token expirado
+                localStorage.removeItem('token');
+                localStorage.removeItem('refreshToken');
+                showAlert('Tu sesión ha expirado. Serás redirigido al inicio de sesión.', 'warning');
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 2000);
+            } else {
+                showAlert('Error al guardar las calificaciones. Por favor, intente nuevamente más tarde.');
+            }
         }
     }
     
@@ -314,6 +344,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         try {
+            showAlert('Eliminando calificación...', 'info');
+            
             const token = localStorage.getItem('token');
             await api.deleteGrade(gradeId, token);
             
@@ -326,7 +358,14 @@ document.addEventListener('DOMContentLoaded', function() {
             
         } catch (error) {
             console.error('Error eliminando calificación:', error);
-            showAlert('Error al eliminar la calificación. Por favor, intente nuevamente más tarde.');
+            if (error.status === 401) {
+                // Token expirado
+                localStorage.removeItem('token');
+                localStorage.removeItem('refreshToken');
+                window.location.href = 'index.html';
+            } else {
+                showAlert('Error al eliminar la calificación. Por favor, intente nuevamente más tarde.');
+            }
         }
     }
     
