@@ -160,8 +160,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // Puntos mínimos para aprobar (61%)
         const minPointsToPass = (totalWeight * 61) / 100;
         
-        // Puntos faltantes
-        const missingPoints = Math.max(0, minPointsToPass - earnedPoints);
+        // Puntos faltantes - solo si hay puntos obtenidos, sino mostrar el total mínimo
+        const missingPoints = earnedPoints > 0 ? 
+            Math.max(0, minPointsToPass - earnedPoints) : 
+            minPointsToPass;
         
         // Determinar si es posible aprobar
         const remainingPoints = totalWeight - evaluatedWeight;
@@ -238,7 +240,7 @@ document.addEventListener('DOMContentLoaded', function() {
         container.innerHTML = summaryHTML;
     }
     
-    // En course-detail.js
+    // Función mejorada para manejar envío de calificaciones
     async function handleGradeSubmit(event) {
         event.preventDefault();
         
@@ -247,6 +249,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const token = localStorage.getItem('token');
         
         try {
+            let savedAnyGrade = false;
+            
             // Procesar datos del formulario
             for (const [key, value] of formData.entries()) {
                 if (key.startsWith('grades[') && value !== '') {
@@ -259,23 +263,44 @@ document.addEventListener('DOMContentLoaded', function() {
                         nota: grade
                     });
                     
-                    // Crear nueva calificación
-                    await api.createGrade({ 
-                        actividad: activityId,
-                        nota: grade 
-                    }, token);
+                    try {
+                        // Verificar si ya existe una calificación
+                        const grades = await api.getGrades(token);
+                        const existingGrade = grades.find(g => g.actividad === activityId);
+                        
+                        if (existingGrade) {
+                            // Actualizar calificación existente
+                            await api.updateGrade(existingGrade.id, { 
+                                nota: grade 
+                            }, token);
+                        } else {
+                            // Crear nueva calificación
+                            await api.createGrade({ 
+                                actividad: activityId,
+                                nota: grade 
+                            }, token);
+                        }
+                        
+                        savedAnyGrade = true;
+                    } catch (innerError) {
+                        console.error(`Error guardando calificación para actividad ${activityId}:`, innerError);
+                    }
                 }
             }
             
-            showAlert('Calificaciones guardadas correctamente.', 'success');
-            
-            // Recargar página para mostrar cambios
-            setTimeout(() => {
-                location.reload();
-            }, 1500);
+            if (savedAnyGrade) {
+                showAlert('Calificaciones guardadas correctamente.', 'success');
+                
+                // Recargar página para mostrar cambios
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            } else {
+                showAlert('No se guardaron calificaciones. Asegúrate de ingresar al menos una calificación.', 'warning');
+            }
             
         } catch (error) {
-            console.error('Error guardando calificaciones:', error);
+            console.error('Error general guardando calificaciones:', error);
             showAlert('Error al guardar las calificaciones. Por favor, intente nuevamente más tarde.');
         }
     }

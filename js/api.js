@@ -22,7 +22,29 @@ async function apiRequest(endpoint, method = 'GET', data = null, token = null) {
     
     try {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-        const result = await response.json();
+        
+        // Para debugging
+        console.log(`API Request to ${endpoint}:`, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries([...response.headers])
+        });
+        
+        // Manejar respuestas vacías (ej. DELETE)
+        if (response.status === 204) {
+            return { success: true };
+        }
+        
+        // Intentar parsear JSON
+        let result;
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            result = await response.json();
+        } else {
+            const text = await response.text();
+            console.warn('Response is not JSON:', text);
+            result = { detail: 'No JSON response received' };
+        }
         
         if (!response.ok) {
             throw {

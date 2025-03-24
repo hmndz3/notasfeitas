@@ -115,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Función para mostrar cursos inscritos
+    // Función mejorada para mostrar cursos inscritos
     function displayEnrolledCourses(courses) {
         const container = document.getElementById('enrolled-courses-container');
         
@@ -133,8 +133,8 @@ document.addEventListener('DOMContentLoaded', function() {
         let html = '';
         
         courses.forEach(course => {
-            // Calcular el progreso (aquí sería un placeholder, en un sistema real calcularías basado en calificaciones)
-            const progreso = Math.floor(Math.random() * 100); // Ejemplo aleatorio
+            // En lugar de número aleatorio, usamos 0% por defecto
+            const progreso = 0;
             const colorClass = (progreso >= 60) ? "success" : (progreso >= 40) ? "warning" : "danger";
             
             html += `
@@ -183,6 +183,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const enrollmentData = {
                 curso: courseId,
                 semestre: semestre,
+                // No enviar usuario_id, se asignará automáticamente en el backend
             };
             
             await api.createEnrollment(enrollmentData, token);
