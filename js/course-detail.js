@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Cargar calificaciones del usuario
             const grades = await api.getGrades(token);
             
-            // Quitar alerta de carga
+            // Limpiar alerta de carga
             document.getElementById('alert-container').innerHTML = '';
             
             // Mostrar actividades y calificaciones
@@ -159,28 +159,38 @@ document.addEventListener('DOMContentLoaded', function() {
         let evaluatedWeight = 0;
         let earnedPoints = 0;
         
+        // Asegurarse de que estamos trabajando con números
         activities.forEach(activity => {
-            totalWeight += parseFloat(activity.ponderacion);
+            const weight = parseFloat(activity.ponderacion);
+            totalWeight += weight;
             
             // Buscar calificación
             const grade = grades.find(g => g.actividad === activity.id);
             if (grade) {
-                evaluatedWeight += parseFloat(activity.ponderacion);
-                earnedPoints += (parseFloat(grade.nota) * parseFloat(activity.ponderacion) / 100);
+                const gradeValue = parseFloat(grade.nota);
+                evaluatedWeight += weight;
+                earnedPoints += (gradeValue * weight / 100); // Convertir a puntos
             }
         });
         
-        // Puntos mínimos para aprobar (61%)
-        const minPointsToPass = (totalWeight * 61) / 100;
+        // Logs para depuración
+        console.log("DEBUG - Totales:", { totalWeight, evaluatedWeight, earnedPoints });
         
-        // Puntos faltantes (CORREGIDO)
+        // Puntos mínimos para aprobar (61% del total)
+        const minPointsToPass = totalWeight * 0.61;
+        
+        // Puntos faltantes para aprobar (CORREGIDO)
         const missingPoints = Math.max(0, minPointsToPass - earnedPoints);
         
-        // Determinar si es posible aprobar
+        // Puntos restantes por evaluar
         const remainingPoints = totalWeight - evaluatedWeight;
+        
+        console.log("DEBUG - Cálculos:", { minPointsToPass, missingPoints, remainingPoints });
+        
+        // Determinar si es posible aprobar
         const canStillPass = missingPoints <= remainingPoints;
         
-        // Estado del curso (MEJORADO)
+        // Estado del curso
         let courseStatus = '';
         let statusClass = '';
         
@@ -256,6 +266,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData(form);
         const token = localStorage.getItem('token');
         
+        // Deshabilitar botón para evitar múltiples envíos
+        const submitButton = form.querySelector('button[type="submit"]');
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+        
         try {
             showAlert('Guardando calificaciones...', 'info');
             
@@ -271,7 +286,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Validar rango de calificación
                     if (grade < 0 || grade > 100) {
-                        errors.push(`La calificación para la actividad ID ${activityId} debe estar entre 0 y 100`);
+                        errors.push(`La calificación para la actividad #${activityId} debe estar entre 0 y 100`);
                         continue;
                     }
                     
@@ -290,24 +305,34 @@ document.addEventListener('DOMContentLoaded', function() {
                             await api.updateGrade(existingGrade.id, { 
                                 nota: grade 
                             }, token);
+                            console.log('Calificación actualizada:', existingGrade.id);
                         } else {
                             // Crear nueva calificación
-                            await api.createGrade({ 
+                            const result = await api.createGrade({ 
                                 actividad: activityId,
                                 nota: grade 
                             }, token);
+                            console.log('Nueva calificación creada:', result);
                         }
                         
                         savedAnyGrade = true;
                     } catch (innerError) {
                         console.error(`Error guardando calificación para actividad ${activityId}:`, innerError);
-                        errors.push(`Error al guardar la calificación para la actividad #${activityId}`);
+                        let errorMsg = `Error al guardar la calificación para actividad #${activityId}`;
+                        if (innerError.data && innerError.data.detail) {
+                            errorMsg += `: ${innerError.data.detail}`;
+                        }
+                        errors.push(errorMsg);
                     }
                 }
             }
             
+            // Reactivar botón
+            submitButton.disabled = false;
+            submitButton.innerHTML = '<i class="fas fa-save me-1"></i> Guardar Notas';
+            
             if (errors.length > 0) {
-                showAlert(`Se encontraron errores: ${errors.join(', ')}`, 'warning');
+                showAlert(`Se encontraron errores: ${errors.join('. ')}`, 'warning');
             } else if (savedAnyGrade) {
                 showAlert('Calificaciones guardadas correctamente.', 'success');
                 
@@ -321,8 +346,12 @@ document.addEventListener('DOMContentLoaded', function() {
             
         } catch (error) {
             console.error('Error general guardando calificaciones:', error);
+            
+            // Reactivar botón
+            submitButton.disabled = false;
+            submitButton.innerHTML = '<i class="fas fa-save me-1"></i> Guardar Notas';
+            
             if (error.status === 401) {
-                // Token expirado
                 localStorage.removeItem('token');
                 localStorage.removeItem('refreshToken');
                 showAlert('Tu sesión ha expirado. Serás redirigido al inicio de sesión.', 'warning');
@@ -330,7 +359,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     window.location.href = 'index.html';
                 }, 2000);
             } else {
-                showAlert('Error al guardar las calificaciones. Por favor, intente nuevamente más tarde.');
+                if (error.data && error.data.detail) {
+                    showAlert(`Error: ${error.data.detail}`, 'danger');
+                } else {
+                    showAlert('Error al guardar las calificaciones. Por favor, intente nuevamente más tarde.', 'danger');
+                }
             }
         }
     }
@@ -344,6 +377,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         try {
+            const button = event.currentTarget;
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            
             showAlert('Eliminando calificación...', 'info');
             
             const token = localStorage.getItem('token');
@@ -359,12 +396,15 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('Error eliminando calificación:', error);
             if (error.status === 401) {
-                // Token expirado
                 localStorage.removeItem('token');
                 localStorage.removeItem('refreshToken');
                 window.location.href = 'index.html';
             } else {
-                showAlert('Error al eliminar la calificación. Por favor, intente nuevamente más tarde.');
+                let errorMsg = 'Error al eliminar la calificación.';
+                if (error.data && error.data.detail) {
+                    errorMsg += ` ${error.data.detail}`;
+                }
+                showAlert(errorMsg, 'danger');
             }
         }
     }
@@ -373,8 +413,13 @@ document.addEventListener('DOMContentLoaded', function() {
     function formatDate(dateString) {
         if (!dateString) return 'No programada';
         
-        const date = new Date(dateString);
-        return date.toLocaleDateString('es-ES');
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('es-ES');
+        } catch (error) {
+            console.error('Error formateando fecha:', error);
+            return dateString || 'Fecha desconocida';
+        }
     }
     
     // Función para mostrar mensajes de alerta

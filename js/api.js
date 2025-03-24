@@ -1,7 +1,17 @@
-// URL base de la API
-const API_BASE_URL = 'http://localhost:8000/api';
+// URL base de la API - Configurable para diferentes entornos
+let API_BASE_URL;
 
-// Función para hacer peticiones a la API
+// Detectar entorno
+if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    API_BASE_URL = 'http://localhost:8000/api';
+} else {
+    // URL para producción (GitHub Pages)
+    API_BASE_URL = 'http://localhost:8000/api'; // CAMBIAR ESTO cuando despliegues tu backend
+}
+
+console.log('API Base URL:', API_BASE_URL);
+
+// Función para hacer peticiones a la API con mejor manejo de errores
 async function apiRequest(endpoint, method = 'GET', data = null, token = null) {
     const headers = {
         'Content-Type': 'application/json'
@@ -13,7 +23,8 @@ async function apiRequest(endpoint, method = 'GET', data = null, token = null) {
     
     const config = {
         method,
-        headers
+        headers,
+        credentials: 'include' // Para manejar cookies
     };
     
     if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
@@ -21,13 +32,13 @@ async function apiRequest(endpoint, method = 'GET', data = null, token = null) {
     }
     
     try {
+        console.log(`Enviando ${method} a ${endpoint}:`, data);
+        
         const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
         
-        // Para debugging
-        console.log(`API Request to ${endpoint}:`, {
+        console.log(`Respuesta de ${endpoint}:`, {
             status: response.status,
-            statusText: response.statusText,
-            headers: Object.fromEntries([...response.headers])
+            statusText: response.statusText
         });
         
         // Manejar respuestas vacías (ej. DELETE)
@@ -40,10 +51,11 @@ async function apiRequest(endpoint, method = 'GET', data = null, token = null) {
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
             result = await response.json();
+            console.log('Datos recibidos:', result);
         } else {
             const text = await response.text();
-            console.warn('Response is not JSON:', text);
-            result = { detail: 'No JSON response received' };
+            console.warn('Respuesta no es JSON:', text);
+            result = { detail: 'No se recibió respuesta JSON' };
         }
         
         if (!response.ok) {
@@ -55,7 +67,17 @@ async function apiRequest(endpoint, method = 'GET', data = null, token = null) {
         
         return result;
     } catch (error) {
-        console.error('API Error:', error);
+        if (error.status) {
+            console.error(`Error API (${error.status}):`, error.data);
+        } else if (error.message) {
+            console.error('Error de red:', error.message);
+            throw {
+                status: 0,
+                data: { detail: `Error de conexión: ${error.message}` }
+            };
+        } else {
+            console.error('Error desconocido:', error);
+        }
         throw error;
     }
 }
@@ -124,7 +146,7 @@ const api = {
     },
     
     createGrade: (gradeData, token) => {
-        console.log('Datos de calificación a enviar:', JSON.stringify(gradeData));
+        console.log('Enviando datos de calificación:', JSON.stringify(gradeData));
         return apiRequest('/grades/', 'POST', gradeData, token);
     },
 
